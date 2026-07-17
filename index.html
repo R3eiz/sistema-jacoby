@@ -42,6 +42,7 @@
 
   <nav class="abas" aria-label="Seções do sistema">
     <button class="aba ativa" data-aba="solicitacoes">Solicitações</button>
+    <button class="aba" data-aba="clientes-competentes">Clientes competentes</button>
     <button class="aba" data-aba="clientes">Clientes finais</button>
     <button class="aba" data-aba="terceirizadas">Terceirizadas</button>
     <button class="aba" data-aba="servicos">Tipos de serviço</button>
@@ -51,7 +52,7 @@
     <div class="filtros">
       <div class="campo-busca">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="busca" placeholder="Buscar por cliente, unidade, terceirizada ou NF" />
+        <input type="text" id="busca" placeholder="Buscar por cliente competente, cliente final, unidade, terceirizada ou NF" />
       </div>
       <div class="sel-wrap">
         <select id="filtro-status"></select>
@@ -62,6 +63,7 @@
     <div id="lista"></div>
   </section>
 
+  <section class="painel" id="painel-clientes-competentes"></section>
   <section class="painel" id="painel-clientes"></section>
   <section class="painel" id="painel-terceirizadas"></section>
   <section class="painel" id="painel-servicos"></section>

@@ -11,6 +11,7 @@ const SERVICOS = ["Retirada de caçamba cheia","Troca de caçamba","Entrega de n
   "Coleta de resíduos","Serviço de vácuo","Transporte de resíduos","Atendimento emergencial"];
 const COND = ["À vista","7 dias","15 dias","30 dias","45 dias","60 dias"];
 const SIMNAO = ["Sim","Não"];
+const TIPOS_PESSOA = ["Pessoa jurídica","Pessoa física"];
 const CHAVE = "jacoby:registros";
 const CHAVE_CADASTROS = "jacoby:cadastros";
 
@@ -41,14 +42,14 @@ const comissao = r => (Number(r.valorLiquido)||0)*((Number(r.percentual)||0)/100
 const dataBR = d => d ? d.split("-").reverse().join("/") : "—";
 const vencido = r => r.vencimento && r.pagamentoConfirmado==="Não" && new Date(r.vencimento+"T23:59:59") < new Date();
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "id"+Date.now()+Math.random().toString(16).slice(2));
-const vazio = () => ({id:uid(),cliente:"",unidade:"",dataSolicitacao:"",dataPrevista:"",dataExecucao:"",
+const vazio = () => ({id:uid(),clienteCompetente:"",cliente:"",unidade:"",dataSolicitacao:"",dataPrevista:"",dataExecucao:"",
   tipoServico:"",terceirizada:"",status:"Solicitação recebida",numeroNF:"",dataNF:"",valorBruto:"",
   valorLiquido:"",condicao:"30 dias",vencimento:"",pagamentoConfirmado:"Não",percentual:5,
   comissaoRecebida:"Não",dataRecebimento:"",documentos:"",observacoes:"",anexos:[]});
 
 /* ---------- estado ---------- */
 let regs = [];
-let cadastros = {clientes:[], terceirizadas:[], servicos:[...SERVICOS]};
+let cadastros = {clientesCompetentes:[], clientes:[], terceirizadas:[], servicos:[...SERVICOS]};
 let edit = null;
 let busca = "";
 let filtro = "";
@@ -61,7 +62,7 @@ function carregar(){
     const b = localStorage.getItem(CHAVE_CADASTROS);
     cadastros = b ? {...cadastros, ...JSON.parse(b)} : cadastros;
   } catch{
-    cadastros = {clientes:[], terceirizadas:[], servicos:[...SERVICOS]};
+    cadastros = {clientesCompetentes:[], clientes:[], terceirizadas:[], servicos:[...SERVICOS]};
   }
   sincronizarCadastros();
 }
@@ -86,17 +87,45 @@ function unicos(lista){
   return [...new Set(lista.map(v=>String(v||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
 }
 function juntarUnico(base, novos){ return unicos([...(base||[]), ...(novos||[])]); }
+function normalizarPessoa(item){
+  if(typeof item==="string") return {id:"p-"+item.toLowerCase().replace(/\W+/g,"-"),nome:item,tipoPessoa:"Pessoa jurídica",documento:"",contato:""};
+  return {
+    id:item.id || uid(),
+    nome:String(item.nome||"").trim(),
+    tipoPessoa:TIPOS_PESSOA.includes(item.tipoPessoa) ? item.tipoPessoa : "Pessoa jurídica",
+    documento:item.documento || "",
+    contato:item.contato || ""
+  };
+}
+function normalizarPessoas(lista){
+  const mapa = new Map();
+  (lista||[]).map(normalizarPessoa).filter(p=>p.nome).forEach(p=>mapa.set(p.nome.toLowerCase(),p));
+  return [...mapa.values()].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
+}
+function adicionarPessoaDaSolicitacao(tipo, nome){
+  if(!String(nome||"").trim()) return;
+  cadastros[tipo] = normalizarPessoas([...(cadastros[tipo]||[]), {nome, tipoPessoa:"Pessoa jurídica", documento:"", contato:""}]);
+}
 function sincronizarCadastros(){
-  cadastros.clientes = juntarUnico(cadastros.clientes, regs.map(r=>r.cliente));
+  cadastros.clientesCompetentes = normalizarPessoas(cadastros.clientesCompetentes);
+  cadastros.clientes = normalizarPessoas(cadastros.clientes);
+  regs.forEach(r=>{
+    adicionarPessoaDaSolicitacao("clientesCompetentes", r.clienteCompetente);
+    adicionarPessoaDaSolicitacao("clientes", r.cliente);
+  });
   cadastros.terceirizadas = juntarUnico(cadastros.terceirizadas, regs.map(r=>r.terceirizada));
   cadastros.servicos = juntarUnico(cadastros.servicos?.length ? cadastros.servicos : SERVICOS, regs.map(r=>r.tipoServico));
 }
 function listaCadastro(tipo){
-  return tipo==="clientes" ? cadastros.clientes : tipo==="terceirizadas" ? cadastros.terceirizadas : cadastros.servicos;
+  if(tipo==="clientesCompetentes") return cadastros.clientesCompetentes;
+  if(tipo==="clientes") return cadastros.clientes;
+  return tipo==="terceirizadas" ? cadastros.terceirizadas : cadastros.servicos;
 }
 function nomeCadastro(tipo){
+  if(tipo==="clientesCompetentes") return "cliente competente";
   return tipo==="clientes" ? "cliente final" : tipo==="terceirizadas" ? "terceirizada" : "tipo de serviço";
 }
+function nomesPessoas(tipo){ return normalizarPessoas(cadastros[tipo]).map(p=>p.nome); }
 
 /* ---------- anel de crescimento ---------- */
 function anel(status, tam=34){
@@ -129,6 +158,14 @@ function trilhaStatus(status){
     }).join("")}
   </div>`;
 }
+function selectResumo(id, campo, lista, valor, rotulo){
+  return `<label class="edicao-rapida" onclick="event.stopPropagation()">
+    <span>${esc(rotulo)}</span>
+    <select onchange="alterarResumo(event,'${esc(id)}','${esc(campo)}',this.value)">
+      ${opcoes(lista,valor,true)}
+    </select>
+  </label>`;
+}
 
 function renderKpis(){
   const abertos = regs.filter(r=>r.status!=="Processo finalizado").length;
@@ -152,7 +189,7 @@ function renderLista(){
   const t = busca.toLowerCase();
   const lista = regs.filter(r =>
     (!filtro || r.status===filtro) &&
-    (!t || [r.cliente,r.unidade,r.terceirizada,r.numeroNF,r.tipoServico]
+    (!t || [r.clienteCompetente,r.cliente,r.unidade,r.terceirizada,r.numeroNF,r.tipoServico]
       .some(v=>(v||"").toLowerCase().includes(t))));
 
   const el = document.getElementById("lista");
@@ -174,6 +211,7 @@ function renderLista(){
       <div class="cartao-corpo">
         <div class="cartao-titulo">
           <h3>${esc(r.cliente||"Sem cliente")}</h3>
+          ${r.clienteCompetente?`<span style="font-size:13px;color:var(--suave);opacity:.8">Competente: ${esc(r.clienteCompetente)}</span>`:""}
           ${r.unidade?`<span style="font-size:13px;color:var(--suave);opacity:.8">· ${esc(r.unidade)}</span>`:""}
           ${vencido(r)?`<span class="selo-venc">${svg("alerta",12)} Vencido em ${dataBR(r.vencimento)}</span>`:""}
         </div>
@@ -184,9 +222,19 @@ function renderLista(){
           <span>Previsto ${dataBR(r.dataPrevista)}</span>
           <span>Execução ${dataBR(r.dataExecucao)}</span>
           ${r.numeroNF?`<span>NF ${esc(r.numeroNF)}</span>`:""}
-          ${r.anexos.length?`<span style="color:var(--verde-700)">${svg("clipe",14)} ${r.anexos.length}</span>`:""}
+          ${(r.anexos||[]).length?`<span style="color:var(--verde-700)">${svg("clipe",14)} ${(r.anexos||[]).length}</span>`:""}
+        </div>
+        <div class="edicoes-rapidas">
+          ${selectResumo(r.id,"status",STATUS,r.status,"Status")}
+          ${selectResumo(r.id,"clienteCompetente",juntarUnico(nomesPessoas("clientesCompetentes"),[r.clienteCompetente]),r.clienteCompetente,"Cliente competente")}
+          ${selectResumo(r.id,"cliente",juntarUnico(nomesPessoas("clientes"),[r.cliente]),r.cliente,"Cliente final")}
+          ${selectResumo(r.id,"terceirizada",juntarUnico(cadastros.terceirizadas,[r.terceirizada]),r.terceirizada,"Terceirizada")}
+          ${selectResumo(r.id,"tipoServico",juntarUnico(cadastros.servicos,[r.tipoServico]),r.tipoServico,"Serviço")}
+          ${selectResumo(r.id,"pagamentoConfirmado",SIMNAO,r.pagamentoConfirmado,"Pagamento")}
         </div>
         <div class="resumo-detalhes">
+          ${detalhe("Cliente competente", r.clienteCompetente)}
+          ${detalhe("Cliente final", r.cliente)}
           ${detalhe("Terceirizada", r.terceirizada)}
           ${detalhe("Serviço", r.tipoServico)}
           ${detalhe("NF", r.numeroNF)}
@@ -243,7 +291,8 @@ function renderModal(){
       <div class="modal-corpo">
         <section class="secao">
           <h3>${svg("folha",16)} Solicitação</h3>
-          ${campo("Cliente final",selWrap("f-cliente",juntarUnico(cadastros.clientes,[r.cliente]),r.cliente,true))}
+          ${campo("Cliente competente",selWrap("f-clienteCompetente",juntarUnico(nomesPessoas("clientesCompetentes"),[r.clienteCompetente]),r.clienteCompetente,true))}
+          ${campo("Cliente final",selWrap("f-cliente",juntarUnico(nomesPessoas("clientes"),[r.cliente]),r.cliente,true))}
           ${campo("Unidade",`<input type="text" id="f-unidade" value="${esc(r.unidade)}" placeholder="Local do atendimento">`)}
           ${campo("Tipo de serviço",selWrap("f-tipoServico",juntarUnico(cadastros.servicos,[r.tipoServico]),r.tipoServico,true))}
           ${campo("Empresa terceirizada",selWrap("f-terceirizada",juntarUnico(cadastros.terceirizadas,[r.terceirizada]),r.terceirizada,true))}
@@ -349,9 +398,47 @@ function removerAnexo(id){
 
 /* ---------- cadastros ---------- */
 function renderCadastros(){
-  renderCadastro("clientes","Clientes finais","Cliente final usado nas solicitações","cliente","painel-clientes");
+  renderCadastroPessoa("clientesCompetentes","Clientes competentes","Responsável ou contratante da solicitação","clienteCompetente","painel-clientes-competentes");
+  renderCadastroPessoa("clientes","Clientes finais","Pessoa física ou jurídica atendida na operação","cliente","painel-clientes");
   renderCadastro("terceirizadas","Terceirizadas","Empresa terceirizada usada na operação","terceirizada","painel-terceirizadas");
   renderCadastro("servicos","Tipos de serviço","Serviço disponível no formulário de solicitação","tipoServico","painel-servicos");
+}
+function renderCadastroPessoa(tipo, titulo, subtitulo, campoRegistro, painelId){
+  const lista = normalizarPessoas(cadastros[tipo]);
+  document.getElementById(painelId).innerHTML = `
+    <div class="cadastro-topo pessoa">
+      <label class="campo">
+        <span>Nome / razão social</span>
+        <input type="text" id="novo-${tipo}-nome" placeholder="${esc(subtitulo)}">
+      </label>
+      <label class="campo menor">
+        <span>Tipo</span>
+        <div class="sel-wrap"><select id="novo-${tipo}-tipo">${opcoes(TIPOS_PESSOA,"Pessoa jurídica",false)}</select>
+        <svg class="seta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></div>
+      </label>
+      <label class="campo">
+        <span>CPF / CNPJ</span>
+        <input type="text" id="novo-${tipo}-documento" placeholder="Documento">
+      </label>
+      <label class="campo">
+        <span>Contato</span>
+        <input type="text" id="novo-${tipo}-contato" placeholder="Nome, telefone ou e-mail">
+      </label>
+      <button class="btn btn-primario" onclick="adicionarPessoa('${tipo}')">${svg("check",16)} Adicionar</button>
+    </div>
+    <div class="cadastro-lista">
+      ${lista.length ? lista.map((p,i)=>`
+        <div class="cadastro-item">
+          <div class="cadastro-info">
+            <strong>${esc(p.nome)}</strong>
+            <span>${esc(p.tipoPessoa)}${p.documento?` · ${esc(p.documento)}`:""}${p.contato?` · ${esc(p.contato)}`:""} · ${contarUso(campoRegistro,p.nome)} solicitação(ões)</span>
+          </div>
+          <div class="cadastro-acoes">
+            <button onclick="editarPessoa('${tipo}',${i})">Editar</button>
+            <button onclick="excluirPessoa('${tipo}',${i})">Excluir</button>
+          </div>
+        </div>`).join("") : `<div class="vazio"><h3>Nenhum ${esc(nomeCadastro(tipo))} cadastrado.</h3><p>Adicione o primeiro item acima.</p></div>`}
+    </div>`;
 }
 function renderCadastro(tipo, titulo, subtitulo, campoRegistro, painelId){
   const lista = listaCadastro(tipo);
@@ -379,6 +466,56 @@ function renderCadastro(tipo, titulo, subtitulo, campoRegistro, painelId){
 }
 function contarUso(campoRegistro, nome){
   return regs.filter(r=>r[campoRegistro]===nome).length;
+}
+function adicionarPessoa(tipo){
+  const nome = document.getElementById(`novo-${tipo}-nome`).value.trim();
+  if(!nome) return;
+  const pessoa = {
+    id:uid(),
+    nome,
+    tipoPessoa:document.getElementById(`novo-${tipo}-tipo`).value,
+    documento:document.getElementById(`novo-${tipo}-documento`).value.trim(),
+    contato:document.getElementById(`novo-${tipo}-contato`).value.trim()
+  };
+  cadastros[tipo] = normalizarPessoas([...(cadastros[tipo]||[]), pessoa]);
+  salvar();
+  render();
+}
+function editarPessoa(tipo, indice){
+  const lista = normalizarPessoas(cadastros[tipo]);
+  const antigo = lista[indice];
+  const nome = prompt(`Nome do ${nomeCadastro(tipo)}`, antigo.nome);
+  if(nome===null) return;
+  const tipoPessoa = prompt("Tipo de pessoa: Pessoa jurídica ou Pessoa física", antigo.tipoPessoa);
+  if(tipoPessoa===null) return;
+  const documento = prompt("CPF / CNPJ", antigo.documento || "");
+  if(documento===null) return;
+  const contato = prompt("Contato", antigo.contato || "");
+  if(contato===null) return;
+  const novo = {
+    ...antigo,
+    nome:nome.trim(),
+    tipoPessoa:TIPOS_PESSOA.includes(tipoPessoa.trim()) ? tipoPessoa.trim() : antigo.tipoPessoa,
+    documento:documento.trim(),
+    contato:contato.trim()
+  };
+  if(!novo.nome) return;
+  lista[indice] = novo;
+  cadastros[tipo] = normalizarPessoas(lista);
+  const campoRegistro = tipo==="clientesCompetentes" ? "clienteCompetente" : "cliente";
+  regs.forEach(r=>{ if(r[campoRegistro]===antigo.nome) r[campoRegistro]=novo.nome; });
+  salvar();
+  render();
+}
+function excluirPessoa(tipo, indice){
+  const lista = normalizarPessoas(cadastros[tipo]);
+  const pessoa = lista[indice];
+  const campoRegistro = tipo==="clientesCompetentes" ? "clienteCompetente" : "cliente";
+  const uso = contarUso(campoRegistro,pessoa.nome);
+  if(uso && !confirm(`"${pessoa.nome}" está em ${uso} solicitação(ões). Excluir apenas remove da lista de cadastro, sem apagar solicitações. Continuar?`)) return;
+  cadastros[tipo] = lista.filter((_,i)=>i!==indice);
+  salvar();
+  render();
 }
 function adicionarCadastro(tipo){
   const el = document.getElementById("novo-"+tipo);
@@ -419,6 +556,15 @@ function trocarAba(aba){
   document.querySelectorAll(".painel").forEach(p=>p.classList.remove("ativo"));
   document.getElementById("painel-"+aba).classList.add("ativo");
 }
+function alterarResumo(event, id, campo, valor){
+  event.stopPropagation();
+  const r = regs.find(x=>x.id===id);
+  if(!r) return;
+  r[campo] = valor;
+  sincronizarCadastros();
+  salvar();
+  render();
+}
 
 /* ---------- ações ---------- */
 function abrirNovo(){ edit = vazio(); renderModal(); }
@@ -429,7 +575,7 @@ function abrirEdicao(id){
 function fecharModal(){ edit = null; renderModal(); }
 
 function salvarForm(){
-  const campos = ["cliente","unidade","dataSolicitacao","dataPrevista","dataExecucao","tipoServico",
+  const campos = ["clienteCompetente","cliente","unidade","dataSolicitacao","dataPrevista","dataExecucao","tipoServico",
     "terceirizada","status","numeroNF","dataNF","valorBruto","valorLiquido","condicao","vencimento",
     "pagamentoConfirmado","percentual","comissaoRecebida","dataRecebimento","documentos","observacoes"];
   campos.forEach(c=>{ const el = document.getElementById("f-"+c); if(el) edit[c] = el.value; });
@@ -450,7 +596,7 @@ function excluir(){
 }
 
 function exportarCSV(){
-  const cols = [["Cliente final","cliente"],["Unidade","unidade"],["Data da solicitação","dataSolicitacao"],
+  const cols = [["Cliente competente","clienteCompetente"],["Cliente final","cliente"],["Unidade","unidade"],["Data da solicitação","dataSolicitacao"],
     ["Data prevista","dataPrevista"],["Data da execução","dataExecucao"],["Tipo de serviço","tipoServico"],
     ["Empresa terceirizada","terceirizada"],["Status","status"],["Número da nota fiscal","numeroNF"],
     ["Data da nota fiscal","dataNF"],["Valor bruto","valorBruto"],["Valor líquido","valorLiquido"],
