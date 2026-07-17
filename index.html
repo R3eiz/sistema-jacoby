@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jacoby Soluções Ambientais - Acompanhamento de Solicitações</title>
+<link rel="stylesheet" href="src/styles.css" />
+</head>
+<body>
+<div class="faixa"></div>
+
+<header class="topo">
+  <div class="topo-in">
+    <div class="marca">
+      <div class="logo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A3D65C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+        </svg>
+      </div>
+      <div>
+        <h1>JACOBY</h1>
+        <p>Soluções Ambientais</p>
+      </div>
+    </div>
+    <div class="divisor"></div>
+    <p class="sub">Acompanhamento de solicitações</p>
+    <div class="espaco"></div>
+    <button class="btn btn-secundario" id="btn-csv">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Exportar CSV
+    </button>
+    <button class="btn btn-primario" id="btn-novo">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Nova solicitação
+    </button>
+  </div>
+</header>
+
+<main>
+  <div id="erro-global"></div>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="filtros">
+    <div class="campo-busca">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="busca" placeholder="Buscar por cliente, unidade, terceirizada ou NF" />
+    </div>
+    <div class="sel-wrap">
+      <select id="filtro-status"></select>
+      <svg class="seta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+  </div>
+
+  <div id="lista"></div>
+
+  <p class="rodape">
+    Os dados ficam salvos apenas neste navegador, neste computador.<br>
+    Exporte o CSV com frequência para guardar uma cópia.
+  </p>
+</main>
+
+<div id="modal"></div>
+
+<script src="src/app.js"></script>
+</body>
+</html>
