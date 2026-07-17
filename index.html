@@ -40,18 +40,31 @@
   <div id="erro-global"></div>
   <div class="kpis" id="kpis"></div>
 
-  <div class="filtros">
-    <div class="campo-busca">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" id="busca" placeholder="Buscar por cliente, unidade, terceirizada ou NF" />
-    </div>
-    <div class="sel-wrap">
-      <select id="filtro-status"></select>
-      <svg class="seta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
-    </div>
-  </div>
+  <nav class="abas" aria-label="Seções do sistema">
+    <button class="aba ativa" data-aba="solicitacoes">Solicitações</button>
+    <button class="aba" data-aba="clientes">Clientes finais</button>
+    <button class="aba" data-aba="terceirizadas">Terceirizadas</button>
+    <button class="aba" data-aba="servicos">Tipos de serviço</button>
+  </nav>
 
-  <div id="lista"></div>
+  <section class="painel ativo" id="painel-solicitacoes">
+    <div class="filtros">
+      <div class="campo-busca">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="busca" placeholder="Buscar por cliente, unidade, terceirizada ou NF" />
+      </div>
+      <div class="sel-wrap">
+        <select id="filtro-status"></select>
+        <svg class="seta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    </div>
+
+    <div id="lista"></div>
+  </section>
+
+  <section class="painel" id="painel-clientes"></section>
+  <section class="painel" id="painel-terceirizadas"></section>
+  <section class="painel" id="painel-servicos"></section>
 
   <p class="rodape">
     Os dados ficam salvos apenas neste navegador, neste computador.<br>

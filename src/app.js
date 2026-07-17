@@ -12,6 +12,7 @@ const SERVICOS = ["Retirada de caçamba cheia","Troca de caçamba","Entrega de n
 const COND = ["À vista","7 dias","15 dias","30 dias","45 dias","60 dias"];
 const SIMNAO = ["Sim","Não"];
 const CHAVE = "jacoby:registros";
+const CHAVE_CADASTROS = "jacoby:cadastros";
 
 /* ---------- ícones ---------- */
 const ico = {
@@ -47,16 +48,30 @@ const vazio = () => ({id:uid(),cliente:"",unidade:"",dataSolicitacao:"",dataPrev
 
 /* ---------- estado ---------- */
 let regs = [];
+let cadastros = {clientes:[], terceirizadas:[], servicos:[...SERVICOS]};
 let edit = null;
 let busca = "";
 let filtro = "";
+let abaAtual = "solicitacoes";
 
 function carregar(){
   try{ const b = localStorage.getItem(CHAVE); regs = b ? JSON.parse(b) : []; }
   catch{ regs = []; }
+  try{
+    const b = localStorage.getItem(CHAVE_CADASTROS);
+    cadastros = b ? {...cadastros, ...JSON.parse(b)} : cadastros;
+  } catch{
+    cadastros = {clientes:[], terceirizadas:[], servicos:[...SERVICOS]};
+  }
+  sincronizarCadastros();
 }
 function salvar(){
-  try{ localStorage.setItem(CHAVE, JSON.stringify(regs)); erroGlobal(""); return true; }
+  try{
+    localStorage.setItem(CHAVE, JSON.stringify(regs));
+    localStorage.setItem(CHAVE_CADASTROS, JSON.stringify(cadastros));
+    erroGlobal("");
+    return true;
+  }
   catch{
     erroGlobal("Não foi possível salvar — o armazenamento do navegador está cheio. Remova anexos antigos ou exporte o CSV e apague solicitações já finalizadas.");
     return false;
@@ -65,6 +80,22 @@ function salvar(){
 function erroGlobal(msg){
   document.getElementById("erro-global").innerHTML = msg
     ? `<div class="erro">${svg("alerta",16)} ${esc(msg)}</div>` : "";
+}
+
+function unicos(lista){
+  return [...new Set(lista.map(v=>String(v||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
+}
+function juntarUnico(base, novos){ return unicos([...(base||[]), ...(novos||[])]); }
+function sincronizarCadastros(){
+  cadastros.clientes = juntarUnico(cadastros.clientes, regs.map(r=>r.cliente));
+  cadastros.terceirizadas = juntarUnico(cadastros.terceirizadas, regs.map(r=>r.terceirizada));
+  cadastros.servicos = juntarUnico(cadastros.servicos?.length ? cadastros.servicos : SERVICOS, regs.map(r=>r.tipoServico));
+}
+function listaCadastro(tipo){
+  return tipo==="clientes" ? cadastros.clientes : tipo==="terceirizadas" ? cadastros.terceirizadas : cadastros.servicos;
+}
+function nomeCadastro(tipo){
+  return tipo==="clientes" ? "cliente final" : tipo==="terceirizadas" ? "terceirizada" : "tipo de serviço";
 }
 
 /* ---------- anel de crescimento ---------- */
@@ -85,6 +116,18 @@ function anel(status, tam=34){
 function opcoes(lista, sel, incluirVazio){
   return (incluirVazio?`<option value="">—</option>`:"") +
     lista.map(o=>`<option value="${esc(o)}"${o===sel?" selected":""}>${esc(o)}</option>`).join("");
+}
+function detalhe(rot, info){
+  return `<div class="detalhe"><span class="rot">${esc(rot)}</span><span class="info">${esc(info||"—")}</span></div>`;
+}
+function trilhaStatus(status){
+  const atual = STATUS.indexOf(status);
+  return `<div class="status-trilha" aria-label="Andamento por status">
+    ${STATUS.map((s,i)=>{
+      const cls = i < atual ? "feito" : i === atual ? "atual" : "futuro";
+      return `<span class="passo-status ${cls}" title="${esc(s)}"><i></i>${esc(s)}</span>`;
+    }).join("")}
+  </div>`;
 }
 
 function renderKpis(){
@@ -137,13 +180,26 @@ function renderLista(){
         <div class="cartao-meta">
           <span>${svg(iconeServico(r.tipoServico),14)} ${esc(r.tipoServico||"—")}</span>
           <span>${esc(r.terceirizada||"Terceirizada não definida")}</span>
+          <span>Solicitado ${dataBR(r.dataSolicitacao)}</span>
+          <span>Previsto ${dataBR(r.dataPrevista)}</span>
           <span>Execução ${dataBR(r.dataExecucao)}</span>
           ${r.numeroNF?`<span>NF ${esc(r.numeroNF)}</span>`:""}
           ${r.anexos.length?`<span style="color:var(--verde-700)">${svg("clipe",14)} ${r.anexos.length}</span>`:""}
         </div>
+        <div class="resumo-detalhes">
+          ${detalhe("Terceirizada", r.terceirizada)}
+          ${detalhe("Serviço", r.tipoServico)}
+          ${detalhe("NF", r.numeroNF)}
+          ${detalhe("Documentos", r.documentos)}
+          ${detalhe("Bruto", r.valorBruto ? brl(r.valorBruto) : "")}
+          ${detalhe("Líquido", r.valorLiquido ? brl(r.valorLiquido) : "")}
+          ${detalhe("Vencimento", dataBR(r.vencimento))}
+          ${detalhe("Pagamento", r.pagamentoConfirmado)}
+        </div>
         <span class="selo" style="background:${FASE_COR[f]}1A;color:${FASE_COR[Math.min(f+1,6)]}">
           <i style="background:${FASE_COR[f]}"></i>${esc(r.status)}
         </span>
+        ${trilhaStatus(r.status)}
       </div>
       <div class="cartao-dir">
         <p class="rot">Comissão</p>
@@ -154,7 +210,7 @@ function renderLista(){
   }).join("");
 }
 
-function render(){ renderKpis(); renderLista(); }
+function render(){ renderKpis(); renderLista(); renderCadastros(); }
 
 /* ---------- modal ---------- */
 function campo(rot, html, largo){
@@ -187,10 +243,10 @@ function renderModal(){
       <div class="modal-corpo">
         <section class="secao">
           <h3>${svg("folha",16)} Solicitação</h3>
-          ${campo("Cliente final",`<input type="text" id="f-cliente" value="${esc(r.cliente)}" placeholder="Razão social">`)}
+          ${campo("Cliente final",selWrap("f-cliente",juntarUnico(cadastros.clientes,[r.cliente]),r.cliente,true))}
           ${campo("Unidade",`<input type="text" id="f-unidade" value="${esc(r.unidade)}" placeholder="Local do atendimento">`)}
-          ${campo("Tipo de serviço",selWrap("f-tipoServico",SERVICOS,r.tipoServico,true))}
-          ${campo("Empresa terceirizada",`<input type="text" id="f-terceirizada" value="${esc(r.terceirizada)}">`)}
+          ${campo("Tipo de serviço",selWrap("f-tipoServico",juntarUnico(cadastros.servicos,[r.tipoServico]),r.tipoServico,true))}
+          ${campo("Empresa terceirizada",selWrap("f-terceirizada",juntarUnico(cadastros.terceirizadas,[r.terceirizada]),r.terceirizada,true))}
           ${campo("Data da solicitação",`<input type="date" id="f-dataSolicitacao" value="${esc(r.dataSolicitacao)}">`)}
           ${campo("Data prevista",`<input type="date" id="f-dataPrevista" value="${esc(r.dataPrevista)}">`)}
           ${campo("Data da execução",`<input type="date" id="f-dataExecucao" value="${esc(r.dataExecucao)}">`)}
@@ -291,6 +347,79 @@ function removerAnexo(id){
   document.getElementById("anexos").innerHTML = renderAnexos();
 }
 
+/* ---------- cadastros ---------- */
+function renderCadastros(){
+  renderCadastro("clientes","Clientes finais","Cliente final usado nas solicitações","cliente","painel-clientes");
+  renderCadastro("terceirizadas","Terceirizadas","Empresa terceirizada usada na operação","terceirizada","painel-terceirizadas");
+  renderCadastro("servicos","Tipos de serviço","Serviço disponível no formulário de solicitação","tipoServico","painel-servicos");
+}
+function renderCadastro(tipo, titulo, subtitulo, campoRegistro, painelId){
+  const lista = listaCadastro(tipo);
+  document.getElementById(painelId).innerHTML = `
+    <div class="cadastro-topo">
+      <label class="campo">
+        <span>Novo ${nomeCadastro(tipo)}</span>
+        <input type="text" id="novo-${tipo}" placeholder="${esc(subtitulo)}">
+      </label>
+      <button class="btn btn-primario" onclick="adicionarCadastro('${tipo}')">${svg("check",16)} Adicionar</button>
+    </div>
+    <div class="cadastro-lista">
+      ${lista.length ? lista.map((nome,i)=>`
+        <div class="cadastro-item">
+          <div class="cadastro-info">
+            <strong>${esc(nome)}</strong>
+            <span>${contarUso(campoRegistro,nome)} solicitação(ões) usando este cadastro</span>
+          </div>
+          <div class="cadastro-acoes">
+            <button onclick="editarCadastro('${tipo}',${i})">Editar</button>
+            <button onclick="excluirCadastro('${tipo}',${i})">Excluir</button>
+          </div>
+        </div>`).join("") : `<div class="vazio"><h3>Nenhum ${esc(nomeCadastro(tipo))} cadastrado.</h3><p>Adicione o primeiro item acima.</p></div>`}
+    </div>`;
+}
+function contarUso(campoRegistro, nome){
+  return regs.filter(r=>r[campoRegistro]===nome).length;
+}
+function adicionarCadastro(tipo){
+  const el = document.getElementById("novo-"+tipo);
+  const valor = el.value.trim();
+  if(!valor) return;
+  cadastros[tipo] = juntarUnico(cadastros[tipo], [valor]);
+  el.value = "";
+  salvar();
+  render();
+}
+function editarCadastro(tipo, indice){
+  const lista = listaCadastro(tipo);
+  const antigo = lista[indice];
+  const novo = prompt(`Editar ${nomeCadastro(tipo)}`, antigo);
+  if(novo===null) return;
+  const valor = novo.trim();
+  if(!valor) return;
+  lista[indice] = valor;
+  cadastros[tipo] = unicos(lista);
+  const campoRegistro = tipo==="clientes" ? "cliente" : tipo==="terceirizadas" ? "terceirizada" : "tipoServico";
+  regs.forEach(r=>{ if(r[campoRegistro]===antigo) r[campoRegistro]=valor; });
+  salvar();
+  render();
+}
+function excluirCadastro(tipo, indice){
+  const lista = listaCadastro(tipo);
+  const nome = lista[indice];
+  const campoRegistro = tipo==="clientes" ? "cliente" : tipo==="terceirizadas" ? "terceirizada" : "tipoServico";
+  const uso = contarUso(campoRegistro,nome);
+  if(uso && !confirm(`"${nome}" está em ${uso} solicitação(ões). Excluir apenas remove da lista de cadastro, sem apagar solicitações. Continuar?`)) return;
+  cadastros[tipo] = lista.filter((_,i)=>i!==indice);
+  salvar();
+  render();
+}
+function trocarAba(aba){
+  abaAtual = aba;
+  document.querySelectorAll(".aba").forEach(b=>b.classList.toggle("ativa",b.dataset.aba===aba));
+  document.querySelectorAll(".painel").forEach(p=>p.classList.remove("ativo"));
+  document.getElementById("painel-"+aba).classList.add("ativo");
+}
+
 /* ---------- ações ---------- */
 function abrirNovo(){ edit = vazio(); renderModal(); }
 function abrirEdicao(id){
@@ -308,6 +437,7 @@ function salvarForm(){
   const i = regs.findIndex(x=>x.id===edit.id);
   const anterior = JSON.parse(JSON.stringify(regs));
   if(i>=0) regs[i] = edit; else regs.unshift(edit);
+  sincronizarCadastros();
 
   if(!salvar()){ regs = anterior; render(); return; }
   edit = null; renderModal(); render();
@@ -347,7 +477,9 @@ document.getElementById("busca").addEventListener("input",e=>{busca=e.target.val
 document.getElementById("filtro-status").addEventListener("change",e=>{filtro=e.target.value;renderLista()});
 document.getElementById("btn-novo").addEventListener("click",abrirNovo);
 document.getElementById("btn-csv").addEventListener("click",exportarCSV);
+document.querySelectorAll(".aba").forEach(b=>b.addEventListener("click",()=>trocarAba(b.dataset.aba)));
 document.addEventListener("keydown",e=>{ if(e.key==="Escape" && edit) fecharModal(); });
 
 carregar();
 render();
+trocarAba(abaAtual);
